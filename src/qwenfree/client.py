@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
@@ -13,6 +14,12 @@ from urllib.parse import urlsplit
 import httpx
 
 from qwenfree.config import QwenFreeConfig
+
+_CONTEXT_OVERFLOW = re.compile(
+    r"request\s*\(([\d,]+)\s+tokens?\)\s+"
+    r"exceeds the available context size\s*\(([\d,]+)\s+tokens?\)",
+    re.IGNORECASE,
+)
 
 
 class RemoteError(RuntimeError):
@@ -61,6 +68,7 @@ class QwenFreeClient:
         messages: Sequence[Mapping[str, str]],
         *,
         temperature: float = 0.7,
+        max_tokens: int | None = None,
         model_name: str | None = None,
     ) -> AsyncIterator[str]:
         """Yield content deltas from a streaming chat completion."""
@@ -75,7 +83,9 @@ class QwenFreeClient:
         if hostname.endswith(".trycloudflare.com"):
             # Cloudflare Quick Tunnels currently do not carry SSE responses.
             body["stream"] = False
-            body["max_tokens"] = _buffered_max_tokens()
+            body["max_tokens"] = (
+                max_tokens if max_tokens is not None else _buffered_max_tokens()
+            )
             print(
                 "Cloudflare tunnel mode is non-streaming; long answers may take "
                 "time to appear.",
@@ -85,6 +95,8 @@ class QwenFreeClient:
             async for content in self._buffered_chat(url, body):
                 yield content
             return
+        if max_tokens is not None:
+            body["max_tokens"] = max_tokens
 
         emitted = False
         last_error: RemoteError | None = None
@@ -100,9 +112,7 @@ class QwenFreeClient:
                                 response.status_code < 500
                                 and response.status_code != 408
                             ):
-                                raise RemoteError(
-                                    f"Server returned HTTP {response.status_code}."
-                                )
+                                raise await _server_response_error(response)
                             raise httpx.HTTPStatusError(
                                 f"HTTP {response.status_code}",
                                 request=response.request,
@@ -154,9 +164,7 @@ class QwenFreeClient:
                 async with httpx.AsyncClient(timeout=timeout) as client:
                     response = await client.post(url, headers=self.headers, json=body)
                     if response.status_code >= 400:
-                        raise RemoteError(
-                            f"Server returned HTTP {response.status_code}."
-                        )
+                        raise await _server_response_error(response)
                     try:
                         payload = response.json()
                         content = payload["choices"][0]["message"]["content"]
@@ -196,3 +204,36 @@ def _buffered_max_tokens() -> int:
     if value < 1:
         raise RemoteError("QWENFREE_MAX_TOKENS must be a positive integer.")
     return value
+
+
+async def _server_response_error(response: httpx.Response) -> RemoteError:
+    """Explain context overflow without forwarding arbitrary server details."""
+    try:
+        payload = json.loads(await response.aread())
+    except (ValueError, httpx.HTTPError):
+        payload = None
+
+    if isinstance(payload, Mapping):
+        error = payload.get("error")
+        if isinstance(error, Mapping):
+            message = error.get("message", "")
+        elif isinstance(error, str):
+            message = error
+        else:
+            message = payload.get("message", "")
+        if isinstance(message, str):
+            match = _CONTEXT_OVERFLOW.search(message)
+            if match:
+                try:
+                    prompt_tokens, context_tokens = (
+                        int(value.replace(",", "")) for value in match.groups()
+                    )
+                except ValueError:
+                    pass
+                else:
+                    return RemoteError(
+                        f"Prompt has {prompt_tokens:,} tokens, but the server "
+                        f"context is {context_tokens:,} tokens."
+                    )
+
+    return RemoteError(f"Server returned HTTP {response.status_code}.")

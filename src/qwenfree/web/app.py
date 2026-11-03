@@ -34,6 +34,7 @@ class ChatRequest(BaseModel):
 
     messages: list[ChatMessage] = Field(min_length=1, max_length=100)
     temperature: float = Field(default=0.7, ge=0, le=2)
+    max_tokens: int | None = Field(default=None, ge=1, le=32768)
 
 
 def _client() -> QwenFreeClient:
@@ -81,7 +82,9 @@ async def api_chat(payload: ChatRequest) -> StreamingResponse:
     async def events():
         try:
             async for delta in client.stream_chat(
-                messages, temperature=payload.temperature
+                messages,
+                temperature=payload.temperature,
+                max_tokens=payload.max_tokens,
             ):
                 yield f"data: {json.dumps({'delta': delta}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"

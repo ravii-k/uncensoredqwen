@@ -44,6 +44,25 @@ repository actually contains the intended architecture and compatible GGUF.
 The bootstrap prints recent server logs when startup fails. See the upstream
 [llama.cpp server documentation](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md).
 
+## Prompt exceeds the available context
+
+An error such as `request (127567 tokens) exceeds the available context size
+(8192 tokens)` means the combined chat prompt is larger than the context the
+Kaggle server was started with. The web UI sends the current chat history with
+each request, so older turns can contribute. Click **New chat** to clear those
+turns, shorten the system prompt, or split a long document into smaller parts
+and summarize each part before continuing. Keep some room for the answer as
+well as the input.
+
+The UI's **Answer tokens** setting limits generated output; it cannot increase
+the prompt context. To use a larger context, interrupt the final Kaggle cell,
+change `CTX_SIZE` in the notebook's second code cell (for example, from `8192`
+to `16384`), rerun that configuration cell and then the final server cell.
+Reconnect from the newly printed URL and key after the server starts. The
+bootstrap accepts at most `32768` context tokens, and a larger setting may not
+fit in available GPU memory. A 127k-token request is above that cap and must
+be split.
+
 ## Out of memory while loading or generating
 
 1. Set `CTX_SIZE=4096` in the notebook environment cell and rerun the server.

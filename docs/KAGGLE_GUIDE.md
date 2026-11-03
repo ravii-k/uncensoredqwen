@@ -41,8 +41,10 @@ try to bypass them.
 5. Review the repository, context, and model-size values in the notebook's
    second cell. The default model repository is verified live by the server
    script. Do not change the model repository unless you have checked that it
-   contains a compatible GGUF. Set `CTX_SIZE` to a smaller value such as `4096`
-   if you need to reduce memory use.
+   contains a compatible GGUF. `CTX_SIZE` defaults to `8192`. You can set it to
+   a larger value before starting the server, up to `32768`, but larger
+   contexts use more GPU memory and may prevent the model from loading. Set it
+   to a smaller value such as `4096` if you need to reduce memory use.
 6. Choose **Run → Run All** (or **Run All** in the toolbar) and wait. The first
    run builds the latest default branch of llama.cpp for T4 and downloads the
    selected model. Both steps can take a while; CUDA compilation may sit at the
@@ -73,6 +75,13 @@ asks for a completed JSON response, and prints a notice that long answers may
 take time to appear. This path defaults to 512 output tokens; set
 `QWENFREE_MAX_TOKENS` in the Mac environment to change it. See [Cloudflare Quick
 Tunnel limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+
+The local browser chat has an optional **Answer tokens** field. Leave it blank
+to keep the existing default; enter a value to limit the generated answer.
+This does not change the server's input context. If a prompt exceeds the
+context, start a new chat or shorten/split the prompt. To raise the context,
+edit `CTX_SIZE` in the notebook and restart the Kaggle server. The project caps
+this setting at `32768`, so larger documents still need to be split.
 
 The model defaults to `/kaggle/temp/model`; the build and logs live under
 `/kaggle/working`. These are temporary Kaggle paths, so a new session may need

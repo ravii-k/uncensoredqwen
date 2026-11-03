@@ -152,7 +152,9 @@ Cloudflare Quick Tunnels do not support Server-Sent Events (SSE), so QwenFree
 uses a completed response for `trycloudflare.com` URLs. It prints a notice
 because long answers can take time to appear. The buffered request defaults to
 512 output tokens; set `QWENFREE_MAX_TOKENS` in the Mac environment to change
-that limit. See [Cloudflare's current Quick Tunnel limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+that limit. The browser UI also has an optional **Answer tokens** field; leave
+it blank to keep the current default. This only limits generated text. See
+[Cloudflare's current Quick Tunnel limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 
 If a Kaggle clone reports `Could not resolve host: github.com`, check that
 Internet is enabled in the active notebook session. The Kaggle guide explains
@@ -221,8 +223,12 @@ runtime; no fixed filename is assumed.
 
 Longer context consumes more memory, especially KV-cache memory. The remote
 server defaults to 8192 tokens and does not attempt the model's native 262k
-context. Set `CTX_SIZE` in the notebook to a supported smaller value if loading
-fails.
+context. `CTX_SIZE` is set before the Kaggle server starts; the current
+bootstrap accepts values up to 32768. Raising it requires stopping and
+restarting the server and may exceed available GPU memory. A 127k-token prompt
+cannot fit within this project's configured maximum, so split it into smaller
+parts or start a new chat to clear earlier turns. The UI's **Answer tokens**
+field limits generated output and does not raise the server context.
 
 ### Why does the tunnel URL change?
 
