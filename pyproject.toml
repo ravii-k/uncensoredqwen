@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qwenfree"
+version = "0.1.0"
+description = "A small Mac client for a temporary, free Kaggle-hosted Qwen GGUF server."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "QwenFree contributors" }]
+dependencies = [
+  "httpx>=0.27,<1",
+  "typer>=0.12,<1",
+  "rich>=13.7,<15",
+  "fastapi>=0.110,<1",
+  "uvicorn>=0.29,<1",
+  "pydantic>=2.6,<3",
+  "tomli-w>=1.0,<2",
+  "tomli>=2.0,<3; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+  "pytest-asyncio>=0.23,<2",
+  "respx>=0.21,<1",
+  "ruff>=0.5,<1",
+]
+
+[project.scripts]
+qwenfree = "qwenfree.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+qwenfree = ["web/static/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+

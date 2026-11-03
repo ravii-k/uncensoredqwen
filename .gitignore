@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environments and secrets
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Models, local runtime data, and chat history
+*.gguf
+*.gguf.*
+history/
+.qwenfree/
+
+# Generated notebook execution output
+notebooks/.ipynb_checkpoints/
