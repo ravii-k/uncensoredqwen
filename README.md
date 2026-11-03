@@ -21,7 +21,7 @@ Free tiers and interfaces can change.
 Mac (qwenfree CLI or local web UI)
     │ HTTPS + API key
     ▼
-Temporary public tunnel (Cloudflare Quick Tunnel, or optional ngrok)
+Temporary public tunnel (ngrok recommended; Cloudflare Quick Tunnel fallback)
     │
     ▼
 Kaggle Notebook ── loopback ── llama-server (CUDA, GPU T4 x2)
@@ -56,7 +56,7 @@ run it following [the guide](docs/KAGGLE_GUIDE.md). Copy the one-line command
 printed by the final cell into Mac Terminal:
 
 ```bash
-qwenfree connect https://YOUR-SESSION.trycloudflare.com --key YOUR_API_KEY
+qwenfree connect https://YOUR-TUNNEL-URL --key YOUR_API_KEY
 qwenfree chat
 ```
 
@@ -66,16 +66,19 @@ notebook. Do not paste the key into a public notebook, issue, or chat.
 Open the browser interface instead with `qwenfree ui`. It listens only on
 `127.0.0.1:8765` and proxies requests through the local Python process.
 
-### Cloudflare streaming note
+### Tunnel choice and streaming
 
-Cloudflare Quick Tunnels currently do not support Server-Sent Events, which is
-the token-streaming protocol used by llama.cpp. QwenFree detects a
-`trycloudflare.com` URL and requests a completed response instead, so the answer
-appears after generation finishes. If you add the optional `NGROK_AUTHTOKEN`
-Kaggle Secret, the notebook uses ngrok when it can obtain a URL; that route
-keeps token streaming enabled. Check ngrok's [current free-plan
+Add and attach an `NGROK_AUTHTOKEN` Kaggle Secret for the recommended tunnel.
+The notebook prefers ngrok when it can obtain a URL and falls back to
+Cloudflare Quick Tunnel otherwise. Check ngrok's [current free-plan
 limits](https://ngrok.com/docs/pricing-limits) and [Terms of
 Service](https://ngrok.com/tos).
+
+Cloudflare Quick Tunnels do not support Server-Sent Events (SSE), so QwenFree
+uses a completed response for `trycloudflare.com` URLs. It prints a notice
+because long answers can take time to appear. The buffered request defaults to
+512 output tokens; set `QWENFREE_MAX_TOKENS` in the Mac environment to change
+that limit. See [Cloudflare's current Quick Tunnel limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 
 ## Commands
 
@@ -157,8 +160,8 @@ is downloaded unless you explicitly run `local pull` and confirm.
 - This is a personal, temporary setup, not a private or reliable hosted
   service. Kaggle sessions may queue, end, or reach account quotas.
 - Cloudflare Quick Tunnels have no uptime guarantee and do not carry SSE;
-  QwenFree buffers responses for those URLs. A configured ngrok endpoint can
-  preserve streaming, subject to its current plan limits.
+  QwenFree buffers responses for those URLs. Ngrok is recommended for token
+  streaming, subject to its current plan limits.
 - Model quality, speed, architecture support, quantization, and license depend
   on the selected model files and current llama.cpp build. Review both model
   cards and the license before use: [official Qwen3.8-27B

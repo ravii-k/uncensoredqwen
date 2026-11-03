@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 WORK_DIR="${WORK_DIR:-/kaggle/working}"
 LLAMA_CPP_DIR="${LLAMA_CPP_DIR:-${WORK_DIR}/llama.cpp}"
-MODEL_DIR="${MODEL_DIR:-${WORK_DIR}/model}"
+MODEL_DIR="${MODEL_DIR:-/kaggle/temp/model}"
 BIN_DIR="${WORK_DIR}/qwenfree-bin"
 LOG_DIR="${WORK_DIR}/qwenfree-logs"
 SERVER_BIN="${LLAMA_CPP_DIR}/build/bin/llama-server"
@@ -82,7 +82,7 @@ cmake -S "${LLAMA_CPP_DIR}" -B "${LLAMA_CPP_DIR}/build" \
   -DCMAKE_CUDA_ARCHITECTURES=75 \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build "${LLAMA_CPP_DIR}/build" --config Release \
-  --target llama-server -j 2
+  --target llama-server -j 4
 
 if [[ ! -x "${SERVER_BIN}" ]]; then
   echo "Build completed, but llama-server was not found at ${SERVER_BIN}." >&2

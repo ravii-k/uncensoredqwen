@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import sys
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 from urllib.parse import urlsplit
@@ -73,6 +75,13 @@ class QwenFreeClient:
         if hostname.endswith(".trycloudflare.com"):
             # Cloudflare Quick Tunnels currently do not carry SSE responses.
             body["stream"] = False
+            body["max_tokens"] = _buffered_max_tokens()
+            print(
+                "Cloudflare tunnel mode is non-streaming; long answers may take "
+                "time to appear.",
+                file=sys.stderr,
+                flush=True,
+            )
             async for content in self._buffered_chat(url, body):
                 yield content
             return
@@ -141,14 +150,13 @@ class QwenFreeClient:
         last_error: RemoteError | None = None
         for attempt in range(self.max_attempts):
             try:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                timeout = httpx.Timeout(self.timeout, read=300.0)
+                async with httpx.AsyncClient(timeout=timeout) as client:
                     response = await client.post(url, headers=self.headers, json=body)
                     if response.status_code >= 400:
-                        if response.status_code < 500 and response.status_code != 408:
-                            raise RemoteError(
-                                f"Server returned HTTP {response.status_code}."
-                            )
-                        response.raise_for_status()
+                        raise RemoteError(
+                            f"Server returned HTTP {response.status_code}."
+                        )
                     try:
                         payload = response.json()
                         content = payload["choices"][0]["message"]["content"]
@@ -161,7 +169,7 @@ class QwenFreeClient:
                 return
             except RemoteError:
                 raise
-            except httpx.HTTPError as exc:
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
                 last_error = RemoteError(
                     "Could not reach the QwenFree server. Check the tunnel URL and "
                     "API key; the Kaggle session may have ended."
@@ -169,5 +177,22 @@ class QwenFreeClient:
                 if attempt + 1 >= self.max_attempts:
                     raise last_error from exc
                 await asyncio.sleep(0.5 * (2**attempt))
+            except httpx.HTTPError as exc:
+                raise RemoteError(
+                    "Could not reach the QwenFree server. Check the tunnel URL and "
+                    "API key; the Kaggle session may have ended."
+                ) from exc
         if last_error is not None:
             raise last_error
+
+
+def _buffered_max_tokens() -> int:
+    """Return the validated completion limit for non-streaming tunnel calls."""
+    raw = os.environ.get("QWENFREE_MAX_TOKENS", "512")
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RemoteError("QWENFREE_MAX_TOKENS must be a positive integer.") from exc
+    if value < 1:
+        raise RemoteError("QWENFREE_MAX_TOKENS must be a positive integer.")
+    return value

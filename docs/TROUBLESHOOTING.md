@@ -32,13 +32,16 @@ guarantee that every allowed file runs comfortably on an 8 GB Mac.
   pass before tunnel startup.
 - Inspect the final cell output for Cloudflare or ngrok errors. The bootstrap
   logs are under `/kaggle/working/qwenfree-logs/` for the current session.
-- If Cloudflare does not provide a URL, add and attach the optional
-  `NGROK_AUTHTOKEN` Kaggle Secret. Check ngrok's current [free-plan
-  limits](https://ngrok.com/docs/pricing-limits) and account status.
-- Cloudflare Quick Tunnels do not support SSE. Without ngrok, QwenFree uses a
-  completed response, so token-by-token output is not available even when the
-  URL works. This is a documented Cloudflare limitation, not a Kaggle model
-  error. See [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+- Add and attach `NGROK_AUTHTOKEN` as the recommended primary tunnel. The
+  notebook falls back to Cloudflare if ngrok cannot provide a URL. Check
+  ngrok's current [free-plan limits](https://ngrok.com/docs/pricing-limits)
+  and account status.
+- Cloudflare Quick Tunnels do not support SSE. Without ngrok, QwenFree sends a
+  completed response, so token-by-token output is unavailable and long answers
+  can take time to appear. The default output cap is 512 tokens; set
+  `QWENFREE_MAX_TOKENS` in the Mac environment to adjust it. This is a
+  documented Cloudflare limitation, not a Kaggle model error. See
+  [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 
 ## HTTP 401 or unauthorized
 

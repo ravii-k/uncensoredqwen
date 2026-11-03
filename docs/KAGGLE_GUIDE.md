@@ -1,7 +1,7 @@
 # Run the QwenFree server on Kaggle
 
-The notebook builds llama.cpp, downloads a verified GGUF into Kaggle's
-temporary working storage, starts an authenticated loopback server, and prints
+The notebook builds llama.cpp, downloads a verified GGUF into temporary Kaggle
+storage, starts an authenticated loopback server, and prints
 a tunnel URL and Mac command. Keep the last notebook cell running while you
 chat. This is a temporary personal server, not private or production hosting.
 
@@ -24,14 +24,14 @@ try to bypass them.
    switch **Internet** on. The bootstrap requires exactly two visible GPUs.
    Kaggle may restart the session after an accelerator change; wait for it to
    come back before running cells.
-4. (Optional) Add Kaggle secrets from **Add-ons → Secrets → Add a new secret**.
-   Attach each secret to this notebook:
+4. Add the recommended ngrok secret from **Add-ons → Secrets → Add a new
+   secret**, then attach it to this notebook. Add the other secrets if needed:
 
    | Secret | When to set it |
    | --- | --- |
+   | `NGROK_AUTHTOKEN` | Recommended primary tunnel. If ngrok cannot provide a URL, the notebook falls back to Cloudflare Quick Tunnel. |
    | `HF_TOKEN` | Only if the selected Hugging Face repository requires access. |
    | `QWENFREE_API_KEY` | Optional fixed key. Leave unset to let the notebook generate a random one for this run. |
-   | `NGROK_AUTHTOKEN` | Optional. When set, QwenFree tries ngrok for token streaming; Cloudflare is used if ngrok cannot provide a URL. |
 
    Never paste secret values into a notebook cell. A configured ngrok account
    has its own terms and quotas; check the [current ngrok limits](https://ngrok.com/docs/pricing-limits).
@@ -58,16 +58,17 @@ try to bypass them.
   sizes, and chooses a complete supported quant within its weight budget.
 - Builds llama.cpp for T4 CUDA and starts `llama-server` on Kaggle loopback
   only, protected by an API key.
-- Starts a temporary Cloudflare Quick Tunnel. If `NGROK_AUTHTOKEN` is
-  configured and ngrok can provide a URL, it uses that endpoint instead so
-  streamed tokens can pass through.
+- Prefers ngrok when `NGROK_AUTHTOKEN` is configured and it can provide a URL;
+  otherwise it falls back to a Cloudflare Quick Tunnel.
 - Prints a health line every five minutes. It does not keep the session alive
   or bypass Kaggle quotas or idle limits.
 
 Cloudflare documents that Quick Tunnels do not support Server-Sent Events
-(SSE). QwenFree detects `trycloudflare.com` and asks for a completed JSON
-response; answers therefore appear after generation rather than token by
-token. See [Cloudflare Quick Tunnel limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+(SSE). If the fallback tunnel is used, QwenFree detects `trycloudflare.com`,
+asks for a completed JSON response, and prints a notice that long answers may
+take time to appear. This path defaults to 512 output tokens; set
+`QWENFREE_MAX_TOKENS` in the Mac environment to change it. See [Cloudflare Quick
+Tunnel limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 
 The notebook runs in temporary Kaggle storage. It does not make the model or
 server persistent across sessions. Keep the notebook private unless you have a
