@@ -45,7 +45,7 @@ def generate_notebook(output: Path = DEFAULT_OUTPUT) -> Path:
         "    file_path.write_bytes(base64.b64decode(content))\n"
         "    if filename.endswith('.sh'):\n"
         "        file_path.chmod(0o700)\n"
-        "print(f\"Prepared server scripts in {server_dir}\")\n"
+        'print(f"Prepared server scripts in {server_dir}")\n'
     )
 
     secrets_source = """import os
@@ -81,6 +81,10 @@ print('Selected model repository:', os.environ['MODEL_REPO'])
    `NGROK_AUTHTOKEN`.
 3. Review the repository and context values in the next cell, then run all cells.
 4. Copy the printed `qwenfree connect` command into Terminal on your Mac.
+
+Cloudflare Quick Tunnels do not support Server-Sent Events, so QwenFree uses a
+completed response for `trycloudflare.com` URLs. Add `NGROK_AUTHTOKEN` as a
+Kaggle Secret to try ngrok for token streaming; Cloudflare remains the fallback.
 
 The final cell runs the authenticated server until you interrupt it. It reports
 health every five minutes and does not try to bypass Kaggle session or quota limits.

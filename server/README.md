@@ -25,9 +25,14 @@ q8_0 KV cache flags. If a model reports an unknown architecture, rebuild from
 the latest llama.cpp default branch before trying again.
 
 Cloudflare Quick Tunnels use a random public URL for each session and require
-no account. A Kaggle `NGROK_AUTHTOKEN` Secret enables a fallback tunnel only if
-Cloudflare does not return a URL. Both tunnel processes stop when the notebook
-cell is interrupted.
+no account. They are intended for testing, have no uptime guarantee, and do not
+support Server-Sent Events (SSE). The client detects a `trycloudflare.com` URL
+and asks llama-server for a completed JSON response, so output arrives when the
+generation finishes. If a Kaggle `NGROK_AUTHTOKEN` Secret is configured, the
+bootstrap tries ngrok and uses it when it returns a URL; Cloudflare remains the
+fallback. This preserves token streaming when ngrok is available. Check
+current ngrok plan limits and terms. Both tunnel processes stop when the
+notebook cell is interrupted.
 
 Kaggle GPU availability, weekly quotas, and session duration change over time.
 Check Kaggle's current limits and terms before use. This script reports health

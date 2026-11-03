@@ -1,14 +1,185 @@
 # QwenFree
 
-QwenFree is a small Python client for using a community Qwen GGUF hosted in a
-temporary Kaggle GPU notebook. The Mac client never downloads the large remote
-model. An optional, separately downloaded small local model can be used as a
-fallback.
+QwenFree is a small, open-source Mac client for chatting with a community
+Qwen3.8-27B GGUF served from a temporary Kaggle GPU notebook. The 27B weights
+stay on Kaggle; the Mac client sends prompts to the authenticated server. An
+optional, explicitly downloaded model of at most 4B parameters can run locally
+on Apple Silicon when the remote session is unavailable.
 
-The complete setup guide, security notes, and supported commands will be
-documented here as the project features are added.
+Kaggle GPU access, queueing, quotas, and session length depend on current
+availability and account limits. Check Kaggle's current [Notebook
+documentation](https://www.kaggle.com/docs/notebooks), [GPU usage
+guide](https://www.kaggle.com/docs/efficient-gpu-usage), and [Terms of
+Use](https://www.kaggle.com/terms) before starting. Cloudflare Quick Tunnels
+are for testing and development; check their [current limits and
+terms](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+Free tiers and interfaces can change.
+
+## Architecture
+
+```text
+Mac (qwenfree CLI or local web UI)
+    │ HTTPS + API key
+    ▼
+Temporary public tunnel (Cloudflare Quick Tunnel, or optional ngrok)
+    │
+    ▼
+Kaggle Notebook ── loopback ── llama-server (CUDA, GPU T4 x2)
+                                      │
+                                      └── GGUF weights downloaded on Kaggle
+```
+
+The tunnel URL is temporary. The API key protects the model API. The client
+stores that key in `~/.config/qwenfree/config.toml` with mode `0600`; the web
+browser never receives it.
+
+## Five-minute Mac client setup
+
+The local installation is short; the first Kaggle server run takes longer
+because it builds llama.cpp and downloads the selected model. See the
+[Kaggle setup guide](docs/KAGGLE_GUIDE.md) for the notebook steps.
+
+Requirements: an Apple Silicon Mac, macOS, Python 3.11+, and an internet
+connection. Keep at least 20 GiB free for comfortable operation. The optional
+local model pull refuses to run below 15 GiB free.
+
+From a checkout of this repository:
+
+```bash
+./scripts/mac_setup.sh
+```
+
+The script checks the Mac and Python architecture, asks before installing
+Homebrew or Python when needed, creates `.venv`, installs QwenFree, and runs
+`qwenfree doctor`. Then import `notebooks/kaggle_server.ipynb` into Kaggle and
+run it following [the guide](docs/KAGGLE_GUIDE.md). Copy the one-line command
+printed by the final cell into Mac Terminal:
+
+```bash
+qwenfree connect https://YOUR-SESSION.trycloudflare.com --key YOUR_API_KEY
+qwenfree chat
+```
+
+The URL and key are examples: use the exact values printed by your running
+notebook. Do not paste the key into a public notebook, issue, or chat.
+
+Open the browser interface instead with `qwenfree ui`. It listens only on
+`127.0.0.1:8765` and proxies requests through the local Python process.
+
+### Cloudflare streaming note
+
+Cloudflare Quick Tunnels currently do not support Server-Sent Events, which is
+the token-streaming protocol used by llama.cpp. QwenFree detects a
+`trycloudflare.com` URL and requests a completed response instead, so the answer
+appears after generation finishes. If you add the optional `NGROK_AUTHTOKEN`
+Kaggle Secret, the notebook uses ngrok when it can obtain a URL; that route
+keeps token streaming enabled. Check ngrok's [current free-plan
+limits](https://ngrok.com/docs/pricing-limits) and [Terms of
+Service](https://ngrok.com/tos).
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `qwenfree connect URL --key KEY` | Check the remote health endpoint and save private connection settings. |
+| `qwenfree chat` | Start an interactive streaming terminal chat. |
+| `qwenfree ask "question"` | Ask once; accepts piped input and `--file PATH`. |
+| `qwenfree ui` | Run the local browser chat on `127.0.0.1:8765`. |
+| `qwenfree status` | Check the saved remote connection. |
+| `qwenfree doctor` | Check Mac compatibility, disk, RAM, config permissions, and remote status. |
+| `qwenfree disk` | Show QwenFree config, history, model, and cache storage. |
+| `qwenfree clean` | Remove history and cache after confirmation; keeps config and models. |
+| `qwenfree local pull` | Verify a selected small Q4 GGUF and ask before downloading it. |
+| `qwenfree local start`, `stop`, `status` | Manage the optional local llama.cpp server. |
+
+Chat commands include `/reset`, `/system <text>`, `/save`, `/temp <0-2>`,
+`/ctx`, and `/exit`. Use `--no-history` with `chat` or `ask` to opt out of
+local JSONL history. History is capped at 50 MiB.
+
+### Optional local fallback
+
+The local fallback is not downloaded or installed automatically. Choose an
+exact Hugging Face repository and Q4 GGUF filename; QwenFree verifies the live
+Hub file list, size, quantization, and parameter count before asking for
+confirmation. The GGUF must be at most 3 GiB and the model at most 4B
+parameters. Hub metadata is preferred; if it does not report parameter count,
+check the model card and supply `--params-billions` yourself.
+
+```bash
+qwenfree local pull --repo OWNER/REPO --file MODEL-Q4_K_M.gguf
+qwenfree local start
+qwenfree connect http://127.0.0.1:8081 --key local
+qwenfree chat
+```
+
+The local server uses Metal (`-ngl 99`), 4096 context, one parallel slot, and
+does not enable `--mlock`. Starting it may ask before installing llama.cpp via
+Homebrew. See [Mac memory and storage notes](docs/MAC_M2_8GB.md).
+
+## FAQ
+
+### Why not run the 27B model on an 8 GB Mac?
+
+The quantized 27B weights alone exceed the Mac's practical unified-memory
+budget, before context and runtime memory. The remote design keeps those
+weights on Kaggle. The local fallback is limited to small models and is not a
+replacement for the 27B server.
+
+### Why Q4?
+
+Q4 is a practical size and quality compromise for the supported local fallback
+and the remote T4 memory budget. The server checks live Hub metadata and tries
+Q4_K_M, then IQ4_XS, then Q3_K_M when the higher quant is unavailable or does
+not fit its configured file-size budget. Quant names and sizes are verified at
+runtime; no fixed filename is assumed.
+
+### Why an 8k context?
+
+Longer context consumes more memory, especially KV-cache memory. The remote
+server defaults to 8192 tokens and does not attempt the model's native 262k
+context. Set `CTX_SIZE` in the notebook to a supported smaller value if loading
+fails.
+
+### Why does the tunnel URL change?
+
+Quick Tunnels create temporary hostnames and stop working when their process or
+Kaggle session stops. Run the notebook again and use its newly printed
+`qwenfree connect` command.
+
+### Can I use this without Kaggle or a tunnel?
+
+Yes, for the small optional local model: run `qwenfree local pull`, then
+`qwenfree local start`, connect to `http://127.0.0.1:8081`, and chat. No model
+is downloaded unless you explicitly run `local pull` and confirm.
+
+## Limitations and responsible use
+
+- This is a personal, temporary setup, not a private or reliable hosted
+  service. Kaggle sessions may queue, end, or reach account quotas.
+- Cloudflare Quick Tunnels have no uptime guarantee and do not carry SSE;
+  QwenFree buffers responses for those URLs. A configured ngrok endpoint can
+  preserve streaming, subject to its current plan limits.
+- Model quality, speed, architecture support, quantization, and license depend
+  on the selected model files and current llama.cpp build. Review both model
+  cards and the license before use: [official Qwen3.8-27B
+  card](https://huggingface.co/Qwen/Qwen3.8-27B), [community uncensored
+  card](https://huggingface.co/JonathanColetti/Qwen3.8-27B-Uncensored), and
+  [community GGUF files](https://huggingface.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF).
+- The community build has reduced safety refusals; refusals are reduced, not
+  eliminated. You are responsible for lawful, ethical use and for any
+  moderation layer appropriate to your use.
+- Kaggle's and tunnel providers' terms, quotas, and free-tier features can
+  change. Check the current terms before use and respect all platform limits.
+
+## Documentation
+
+- [Kaggle guide](docs/KAGGLE_GUIDE.md)
+- [MacBook Air M2 with 8 GB](docs/MAC_M2_8GB.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Security](docs/SECURITY.md)
 
 ## License
 
-The client and scripts are released under the MIT License. Model weights have
-their own licenses and terms; check the model card before use.
+QwenFree software is MIT licensed; see [LICENSE](LICENSE). Model weights and
+third-party tools have separate licenses and terms. This project does not
+redistribute model weights.
