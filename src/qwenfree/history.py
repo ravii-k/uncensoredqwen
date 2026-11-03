@@ -9,12 +9,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from qwenfree.paths import default_data_dir
+
 MAX_HISTORY_BYTES = 50 * 1024 * 1024
 
 
 def default_history_path() -> Path:
     """Return the standard local JSONL history path."""
-    return Path.home() / ".local" / "share" / "qwenfree" / "history" / "chat.jsonl"
+    return default_data_dir() / "history" / "chat.jsonl"
 
 
 def history_size(path: Path | None = None) -> int:

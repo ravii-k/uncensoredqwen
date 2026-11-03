@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import sys
 from pathlib import Path
 
@@ -12,7 +13,9 @@ from rich.table import Table
 
 from qwenfree.client import QwenFreeClient, RemoteError
 from qwenfree.config import ConfigError, QwenFreeConfig, load_config, save_config
-from qwenfree.history import append_turn, default_history_path
+from qwenfree.doctor import collect_checks, directory_size
+from qwenfree.history import append_turn, clear_history, default_history_path
+from qwenfree.paths import default_cache_dir, default_model_dir
 
 app = typer.Typer(help="Use a temporary remote QwenFree server from your Mac.")
 console = Console()
@@ -89,6 +92,79 @@ def status() -> None:
             "The Kaggle session may have ended. Run the notebook again, then connect."
         )
         raise typer.Exit(code=1)
+
+
+@app.command()
+def doctor() -> None:
+    """Check Mac compatibility, local storage, permissions, and server status."""
+    table = Table(title="QwenFree doctor", show_header=True, header_style="bold")
+    table.add_column("Check")
+    table.add_column("Status")
+    table.add_column("Details")
+    checks = collect_checks()
+    for check in checks:
+        color = {"PASS": "green", "WARN": "yellow", "FAIL": "red"}[check.status]
+        table.add_row(check.name, f"[{color}]{check.status}[/{color}]", check.detail)
+    console.print(table)
+    if any(check.status == "FAIL" for check in checks):
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def disk() -> None:
+    """List QwenFree configuration, history, model, and cache storage."""
+    config_path = Path.home() / ".config" / "qwenfree" / "config.toml"
+    history_dir = default_history_path().parent
+    locations = [
+        ("Config", config_path),
+        ("History", history_dir),
+        ("Local model(s)", default_model_dir()),
+        ("Cache", default_cache_dir()),
+    ]
+    table = Table(title="QwenFree disk usage", show_header=True, header_style="bold")
+    table.add_column("Data")
+    table.add_column("Path")
+    table.add_column("Size", justify="right")
+    total = 0
+    for label, path in locations:
+        size = directory_size(path)
+        total += size
+        table.add_row(label, str(path), _format_size(size))
+    table.add_row("Total", "", _format_size(total), style="bold")
+    console.print(table)
+
+
+@app.command()
+def clean(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Confirm without prompting."),
+) -> None:
+    """Delete chat history and cache after confirmation; preserve config and models."""
+    if not yes and not typer.confirm(
+        "Delete QwenFree chat history and cache?", default=False
+    ):
+        console.print("Canceled; nothing was deleted.")
+        return
+
+    history_path = default_history_path()
+    history_dir = history_path.parent
+    cache_dir = default_cache_dir()
+    if history_dir.exists() or history_dir.is_symlink():
+        if history_dir.is_symlink():
+            history_dir.unlink()
+        else:
+            clear_history(history_path)
+            shutil.rmtree(history_dir, ignore_errors=True)
+        console.print(f"Removed history: {history_dir}")
+    else:
+        console.print("No chat history found.")
+    if cache_dir.exists() or cache_dir.is_symlink():
+        if cache_dir.is_symlink():
+            cache_dir.unlink()
+        else:
+            shutil.rmtree(cache_dir)
+        console.print(f"Removed cache: {cache_dir}")
+    else:
+        console.print("No cache found.")
 
 
 @app.command()
@@ -249,6 +325,16 @@ def ask(
     sys.stdout.write(answer + "\n")
     if not no_history:
         append_turn(prompt, answer)
+
+
+def _format_size(size: int) -> str:
+    """Format a byte count using a compact binary unit."""
+    value = float(size)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if value < 1024 or unit == "TiB":
+            return f"{value:.1f} {unit}" if unit != "B" else f"{int(value)} B"
+        value /= 1024
+    return f"{size} B"
 
 
 if __name__ == "__main__":
