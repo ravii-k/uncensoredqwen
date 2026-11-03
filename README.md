@@ -267,3 +267,7 @@ is downloaded unless you explicitly run `local pull` and confirm.
 QwenFree software is MIT licensed; see [LICENSE](LICENSE). Model weights and
 third-party tools have separate licenses and terms. This project does not
 redistribute model weights.
+
+---
+
+*Built by [Ravi Kashyap](https://github.com/ravii-k) ·
