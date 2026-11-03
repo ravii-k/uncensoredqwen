@@ -1,5 +1,39 @@
 # Troubleshooting
 
+## GitHub clone fails with a DNS error
+
+The first Kaggle run failed with `Could not resolve host: github.com`. Internet
+was off for the active notebook session. Open **Settings** and check the
+Internet action: **Turn off internet** means it is enabled; **Turn on
+internet** means it is disabled. Enable it, then rerun the final bootstrap
+cell. If the runtime still cannot resolve GitHub, restart the session after
+turning Internet on and run the notebook again. The bootstrap now prints this
+Kaggle-specific hint when cloning or updating llama.cpp fails.
+
+## CMake cannot find `CUDA::cuda_driver`
+
+This happened on the first Kaggle CUDA build because CMake did not search
+Kaggle's NVIDIA driver directory. The current `server/bootstrap.sh` adds
+`/usr/local/nvidia/lib64` to `CMAKE_LIBRARY_PATH` before configuring llama.cpp.
+If you are running an older copy of the notebook, regenerate or reimport it
+from this repository so it includes the fix.
+
+## Build appears to pause at one percentage
+
+The first run compiles llama.cpp and its CUDA kernels for the T4. Some CUDA
+translation units take much longer than others, so the percentage can stay the
+same while NVCC is working. Look for new compiler output and let the cell
+finish; the build uses four jobs and targets CUDA architecture 7.5. Interrupting
+it means starting the unfinished build again.
+
+## Server starts, but QwenFree still says “Checking server”
+
+The local UI checks the remote health endpoint when it opens. Give it a few
+seconds. If it does not change to **Connected**, run `qwenfree status`, check
+that the final Kaggle cell is still running, and reconnect with the latest
+`qwenfree connect URL --key KEY` command. A restarted Kaggle session has a new
+tunnel URL and usually a new API key.
+
 ## Unknown model architecture
 
 The Kaggle bootstrap clones or updates the latest default branch of

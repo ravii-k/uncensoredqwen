@@ -1,4 +1,4 @@
-# Run the QwenFree server on Kaggle
+# Run uncensored Qwen3.8-27B on Kaggle
 
 The notebook builds llama.cpp, downloads a verified GGUF into temporary Kaggle
 storage, starts an authenticated loopback server, and prints
@@ -23,7 +23,10 @@ try to bypass them.
    **Accelerator → GPU T4 x2** if it is currently offered to your account, and
    switch **Internet** on. The bootstrap requires exactly two visible GPUs.
    Kaggle may restart the session after an accelerator change; wait for it to
-   come back before running cells.
+   come back before running cells. The Internet menu shows the action it will
+   take: **Turn off internet** means Internet is already on. If the menu says
+   **Turn on internet**, click it. Check again in the active session before
+   starting the build.
 4. Add the recommended ngrok secret from **Add-ons → Secrets → Add a new
    secret**, then attach it to this notebook. Add the other secrets if needed:
 
@@ -41,10 +44,11 @@ try to bypass them.
    contains a compatible GGUF. Set `CTX_SIZE` to a smaller value such as `4096`
    if you need to reduce memory use.
 6. Choose **Run → Run All** (or **Run All** in the toolbar) and wait. The first
-   run builds the latest default branch of llama.cpp and downloads the selected
-   model, so startup can take a while. Keep the session connected. If Kaggle
-   reports that the requested accelerator is unavailable or your quota is
-   exhausted, stop and check the account's current usage panel.
+   run builds the latest default branch of llama.cpp for T4 and downloads the
+   selected model. Both steps can take a while; CUDA compilation may sit at the
+   same percentage as a large kernel builds. Keep the session connected. If
+   Kaggle reports that the requested accelerator is unavailable or your quota
+   is exhausted, stop and check the account's current usage panel.
 7. When the final cell prints `QWENFREE_URL`, `QWENFREE_KEY`, and a
    `qwenfree connect ...` line, copy that exact command into Terminal on your
    Mac. Then run `qwenfree chat` or `qwenfree ui`.
@@ -70,7 +74,8 @@ take time to appear. This path defaults to 512 output tokens; set
 `QWENFREE_MAX_TOKENS` in the Mac environment to change it. See [Cloudflare Quick
 Tunnel limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 
-The notebook runs in temporary Kaggle storage. It does not make the model or
-server persistent across sessions. Keep the notebook private unless you have a
-reason to share it, and never include the printed key in public notebook output
-or screenshots.
+The model defaults to `/kaggle/temp/model`; the build and logs live under
+`/kaggle/working`. These are temporary Kaggle paths, so a new session may need
+to rebuild and download the model again. Keep the notebook private unless you
+have a reason to share it, and never include the printed key in public notebook
+output or screenshots.

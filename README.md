@@ -1,10 +1,10 @@
-# QwenFree
+# QwenFree — Uncensored Qwen on Kaggle
 
-QwenFree is a small, open-source Mac client for chatting with a community
-Qwen3.8-27B GGUF served from a temporary Kaggle GPU notebook. The 27B weights
-stay on Kaggle; the Mac client sends prompts to the authenticated server. An
-optional, explicitly downloaded model of at most 4B parameters can run locally
-on Apple Silicon when the remote session is unavailable.
+QwenFree is an open-source Mac client for the community **uncensored
+Qwen3.8-27B** GGUF. The model runs in a temporary Kaggle GPU notebook; the Mac
+client sends prompts to its authenticated server. An optional, explicitly
+downloaded model of at most 4B parameters can run locally on Apple Silicon when
+the remote session is unavailable.
 
 Kaggle GPU access, queueing, quotas, and session length depend on current
 availability and account limits. Check Kaggle's current [Notebook
@@ -14,6 +14,12 @@ Use](https://www.kaggle.com/terms) before starting. Cloudflare Quick Tunnels
 are for testing and development; check their [current limits and
 terms](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 Free tiers and interfaces can change.
+
+The default weights are a community fine-tune, not an official Qwen release.
+“Uncensored” describes that community model; it does not guarantee how it will
+answer every prompt. Read the [community model card](https://huggingface.co/JonathanColetti/Qwen3.8-27B-Uncensored)
+and the [GGUF repository](https://huggingface.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF)
+before use.
 
 ![QwenFree architecture: Mac client, temporary tunnel, and Kaggle GPU server](docs/assets/architecture.svg)
 
@@ -35,7 +41,7 @@ The tunnel URL is temporary. The API key protects the model API. The client
 stores that key in `~/.config/qwenfree/config.toml` with mode `0600`; the web
 browser never receives it.
 
-## Five-minute Mac client setup
+## Install the Mac client
 
 The local installation is short; the first Kaggle server run takes longer
 because it builds llama.cpp and downloads the selected model. See the
@@ -83,6 +89,13 @@ uses a completed response for `trycloudflare.com` URLs. It prints a notice
 because long answers can take time to appear. The buffered request defaults to
 512 output tokens; set `QWENFREE_MAX_TOKENS` in the Mac environment to change
 that limit. See [Cloudflare's current Quick Tunnel limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+
+If a Kaggle clone reports `Could not resolve host: github.com`, check that
+Internet is enabled in the active notebook session. The Kaggle guide explains
+the Settings menu wording and how to retry. The bootstrap also adds Kaggle's
+NVIDIA driver directory to CMake's search path, which fixes the missing
+`CUDA::cuda_driver` target seen on the first build. See
+[troubleshooting](docs/TROUBLESHOOTING.md) for both issues and other fixes.
 
 ## Commands
 
@@ -167,11 +180,11 @@ is downloaded unless you explicitly run `local pull` and confirm.
   QwenFree buffers responses for those URLs. Ngrok is recommended for token
   streaming, subject to its current plan limits.
 - Model quality, speed, architecture support, quantization, and license depend
-  on the selected model files and current llama.cpp build. Review both model
-  cards and the license before use: [official Qwen3.8-27B
-  card](https://huggingface.co/Qwen/Qwen3.8-27B), [community uncensored
-  card](https://huggingface.co/JonathanColetti/Qwen3.8-27B-Uncensored), and
-  [community GGUF files](https://huggingface.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF).
+  on the selected files and current llama.cpp build. The default is the
+  community uncensored Qwen fine-tune, not the official Qwen release. Review
+  the [official Qwen3.8-27B card](https://huggingface.co/Qwen/Qwen3.8-27B),
+  [community model card](https://huggingface.co/JonathanColetti/Qwen3.8-27B-Uncensored),
+  and [community GGUF files](https://huggingface.co/JonathanColetti/Qwen3.8-27B-Uncensored-GGUF).
 - The community build has reduced safety refusals; refusals are reduced, not
   eliminated. You are responsible for lawful, ethical use and for any
   moderation layer appropriate to your use.

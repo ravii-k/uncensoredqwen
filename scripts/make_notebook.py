@@ -74,9 +74,11 @@ print('Selected model repository:', os.environ['MODEL_REPO'])
         "cells": [
             _cell(
                 "markdown",
-                """# QwenFree Kaggle server
+                """# Uncensored Qwen3.8-27B on Kaggle
 
 1. In Notebook options, select **Accelerator → GPU T4 x2** and turn **Internet** on.
+   In the Settings menu, **Turn off internet** means Internet is on. If the menu
+   says **Turn on internet**, click it before running the build.
 2. Add and attach the recommended `NGROK_AUTHTOKEN` Secret for the primary
    tunnel. `HF_TOKEN` and `QWENFREE_API_KEY` are optional.
 3. Review the repository and context values in the next cell, then run all cells.
@@ -88,6 +90,9 @@ Events, so QwenFree uses a completed response for `trycloudflare.com` URLs.
 
 The final cell runs the authenticated server until you interrupt it. It reports
 health every five minutes and does not try to bypass Kaggle session or quota limits.
+If a GitHub clone fails with a DNS error, enable Internet in the active session
+and rerun the final cell. See the repository troubleshooting guide for the
+CUDA driver and other first-run issues.
 """,
             ),
             _cell("code", secrets_source),

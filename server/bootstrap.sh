@@ -70,10 +70,16 @@ fi
 
 if [[ -d "${LLAMA_CPP_DIR}/.git" ]]; then
   echo "Updating llama.cpp from its configured default branch..."
-  git -C "${LLAMA_CPP_DIR}" pull --ff-only
+  if ! git -C "${LLAMA_CPP_DIR}" pull --ff-only; then
+    echo "Could not update llama.cpp from GitHub. Enable Internet in the active Kaggle session, then rerun this cell." >&2
+    exit 1
+  fi
 else
   echo "Cloning the latest default branch of ggml-org/llama.cpp..."
-  git clone --depth 1 https://github.com/ggml-org/llama.cpp.git "${LLAMA_CPP_DIR}"
+  if ! git clone --depth 1 https://github.com/ggml-org/llama.cpp.git "${LLAMA_CPP_DIR}"; then
+    echo "Could not clone llama.cpp from GitHub. Enable Internet in the active Kaggle session, then rerun this cell." >&2
+    exit 1
+  fi
 fi
 
 echo "Building llama-server with CUDA for NVIDIA T4 (compute capability 7.5)..."
