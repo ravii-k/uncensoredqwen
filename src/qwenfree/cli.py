@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import shutil
+import subprocess
 import sys
 import threading
 import webbrowser
@@ -11,15 +14,36 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.progress import BarColumn, DownloadColumn, Progress, TransferSpeedColumn
 from rich.table import Table
 
 from qwenfree.client import QwenFreeClient, RemoteError
 from qwenfree.config import ConfigError, QwenFreeConfig, load_config, save_config
 from qwenfree.doctor import collect_checks, directory_size
 from qwenfree.history import append_turn, clear_history, default_history_path
+from qwenfree.local_fallback import (
+    GIB,
+    MIN_FREE_BYTES,
+    LocalFallbackError,
+    download_local_model,
+    find_llama_server,
+    load_model_manifest,
+    local_health_check,
+    local_server_pid,
+    model_target_path,
+    require_apple_silicon,
+    save_model_manifest,
+    start_local_server,
+    stop_local_server,
+    verify_local_model,
+)
 from qwenfree.paths import default_cache_dir, default_model_dir
 
 app = typer.Typer(help="Use a temporary remote QwenFree server from your Mac.")
+local_app = typer.Typer(
+    help="Manage the optional small local fallback.", no_args_is_help=True
+)
+app.add_typer(local_app, name="local")
 console = Console()
 
 
@@ -188,6 +212,188 @@ def ui(
         access_log=False,
         log_level="warning",
     )
+
+
+@local_app.command("pull")
+def local_pull(
+    repo: str | None = typer.Option(None, "--repo", envvar="QWENFREE_LOCAL_REPO"),
+    file: str | None = typer.Option(None, "--file", envvar="QWENFREE_LOCAL_FILE"),
+    params_billions: float | None = typer.Option(
+        None, "--params-billions", envvar="QWENFREE_LOCAL_PARAMS_BILLIONS"
+    ),
+) -> None:
+    """Verify and explicitly download a selected small Q4 GGUF."""
+    try:
+        require_apple_silicon()
+        if not repo or not file:
+            raise LocalFallbackError(
+                "Choose a small model explicitly with --repo and --file (or set "
+                "QWENFREE_LOCAL_REPO and QWENFREE_LOCAL_FILE)."
+            )
+        token = os.environ.get("HF_TOKEN") or None
+        selection = asyncio.run(
+            verify_local_model(
+                repo,
+                file,
+                token=token,
+                parameters_billion=params_billions,
+            )
+        )
+        model_root = default_model_dir()
+        model_root.mkdir(parents=True, exist_ok=True)
+        free_bytes = shutil.disk_usage(model_root).free
+        if free_bytes < MIN_FREE_BYTES:
+            raise LocalFallbackError(
+                f"Only {free_bytes / GIB:.1f} GiB is free; local pull requires "
+                "at least 15 GiB."
+            )
+        target = model_target_path(selection.repo_id, selection.filename)
+    except (LocalFallbackError, OSError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title="Verified local model", show_header=True, header_style="bold")
+    table.add_column("Item")
+    table.add_column("Value")
+    table.add_row("Repository", selection.repo_id)
+    table.add_row("File", selection.filename)
+    table.add_row("Q4 file size", _format_size(selection.size_bytes))
+    table.add_row(
+        "Parameters",
+        f"{selection.parameters_billion:g}B ({selection.parameters_source})",
+    )
+    table.add_row("Free disk", f"{free_bytes / GIB:.1f} GiB")
+    console.print(table)
+    if not typer.confirm("Download this model to the Mac?", default=False):
+        console.print("Canceled; no model was downloaded.")
+        return
+
+    try:
+        if target.is_file() and target.stat().st_size == selection.size_bytes:
+            model_path = target
+            console.print("That exact model file is already present.")
+        else:
+            with Progress(
+                "{task.description}",
+                BarColumn(),
+                DownloadColumn(),
+                TransferSpeedColumn(),
+                console=console,
+                transient=True,
+            ) as progress:
+                task = progress.add_task(
+                    "Downloading selected GGUF", total=selection.size_bytes
+                )
+                model_path = asyncio.run(
+                    download_local_model(
+                        selection,
+                        target,
+                        token=token,
+                        on_progress=lambda amount: progress.update(
+                            task, advance=amount
+                        ),
+                    )
+                )
+        save_model_manifest(selection, model_path)
+    except (LocalFallbackError, OSError) as exc:
+        console.print(f"[red]Local model pull failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]Local fallback ready:[/green] {model_path}")
+
+
+@local_app.command("start")
+def local_start() -> None:
+    """Start the selected Q4 model with Metal, 4k context, and one slot."""
+    try:
+        require_apple_silicon()
+        load_model_manifest()
+    except LocalFallbackError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    server_path = find_llama_server()
+    if server_path is None:
+        brew = shutil.which("brew")
+        if brew is None:
+            console.print("[red]Install Homebrew first; llama.cpp is optional.[/red]")
+            raise typer.Exit(code=1)
+        if not typer.confirm("Install llama.cpp with Homebrew now?", default=False):
+            console.print("Canceled; llama.cpp was not installed.")
+            return
+        try:
+            subprocess.run([brew, "install", "llama.cpp"], check=True)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            console.print(f"[red]Homebrew could not install llama.cpp: {exc}[/red]")
+            raise typer.Exit(code=1) from exc
+        server_path = find_llama_server()
+        if server_path is None:
+            console.print(
+                "[red]Homebrew finished, but llama-server was not found on PATH.[/red]"
+            )
+            raise typer.Exit(code=1)
+
+    console.print(
+        "[yellow]On an 8 GB Mac, macOS and a browser typically use 4–5 GB of RAM. "
+        "This fallback uses Q4, a 4096-token context, one parallel slot, and leaves "
+        "mlock disabled.[/yellow]"
+    )
+    try:
+        pid = start_local_server(server_path)
+    except LocalFallbackError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    port = int(os.environ.get("QWENFREE_LOCAL_PORT", "8081"))
+    console.print(
+        f"[green]Local server ready[/green] at http://127.0.0.1:{port} (PID {pid})."
+    )
+
+
+@local_app.command("stop")
+def local_stop() -> None:
+    """Stop the tracked local llama-server process."""
+    try:
+        stopped = stop_local_server()
+    except LocalFallbackError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    console.print(
+        "Local server stopped." if stopped else "Local server is not running."
+    )
+
+
+@local_app.command("status")
+def local_status() -> None:
+    """Show local model, llama-server, and process status."""
+    table = Table(
+        title="QwenFree local fallback", show_header=True, header_style="bold"
+    )
+    table.add_column("Check")
+    table.add_column("Result")
+    server_path = find_llama_server()
+    table.add_row("llama-server", server_path or "Not installed (optional)")
+    try:
+        model = load_model_manifest()
+    except LocalFallbackError as exc:
+        table.add_row("Model", str(exc))
+    else:
+        table.add_row("Model", f"{model['repo_id']} / {model['filename']}")
+        table.add_row("Model file", str(model["model_path"]))
+    pid = local_server_pid()
+    if pid is None:
+        table.add_row("Process", "Stopped")
+    else:
+        record_path = default_cache_dir() / "local" / "llama-server.json"
+        try:
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            port = int(record.get("port", 8081)) if isinstance(record, dict) else 8081
+        except (OSError, ValueError, TypeError):
+            port = 8081
+        healthy = asyncio.run(local_health_check(port))
+        table.add_row(
+            "Process",
+            f"PID {pid}; {'healthy' if healthy else 'starting or unresponsive'}",
+        )
+    console.print(table)
 
 
 @app.command()
