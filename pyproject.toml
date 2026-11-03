@@ -46,7 +46,7 @@ asyncio_mode = "auto"
 line-length = 88
 target-version = "py311"
 src = ["src"]
+extend-exclude = ["notebooks/kaggle_server.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-
