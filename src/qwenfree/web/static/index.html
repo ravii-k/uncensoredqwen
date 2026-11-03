@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>QwenFree</title>
+  <style>
+    :root{color-scheme:dark;--bg:#101216;--panel:#171a20;--panel2:#1e222a;--line:#2b303a;--text:#e8eaf0;--muted:#9aa2b1;--accent:#9c8cff;--green:#55d6a0;--red:#ff707b;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column}button,textarea,input{font:inherit;color:inherit}button{border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:9px 13px;cursor:pointer}button:hover{border-color:var(--accent)}button:disabled{opacity:.55;cursor:wait}
+    header{height:62px;display:flex;align-items:center;gap:12px;padding:0 max(18px,calc((100vw - 900px)/2));border-bottom:1px solid var(--line);background:#13151a}header strong{font-size:17px;letter-spacing:.2px}.status{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:13px}.dot{width:8px;height:8px;border-radius:50%;background:#747b88}.dot.on{background:var(--green);box-shadow:0 0 10px #55d6a066}.dot.off{background:var(--red)}#new-chat{margin-left:auto}
+    main{width:min(900px,100%);margin:0 auto;flex:1;min-height:0;display:flex;flex-direction:column;padding:18px 18px 0}.controls{display:grid;grid-template-columns:1fr auto;gap:12px;margin-bottom:12px}.system-box{resize:vertical;min-height:54px;max-height:130px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.temperature{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}.temperature input{width:100px;accent-color:var(--accent)}#messages{flex:1;overflow:auto;padding:12px 2px 24px;scroll-behavior:smooth}.message{display:flex;gap:11px;margin:0 auto 20px;max-width:790px}.avatar{width:29px;height:29px;flex:0 0 29px;border-radius:9px;background:#292638;color:#c9c0ff;display:grid;place-items:center;font-weight:700;font-size:13px}.message.user .avatar{background:#24352f;color:#9be4bf}.body{min-width:0;flex:1}.who{font-size:12px;color:var(--muted);margin:3px 0 6px}.content{overflow-wrap:anywhere}.content p{margin:0 0 10px}.content code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#252932;padding:2px 5px;border-radius:5px;font-size:.92em}.content pre{position:relative;overflow:auto;background:#0c0e12;border:1px solid var(--line);padding:14px;border-radius:9px;margin:10px 0}.content pre code{background:none;padding:0;white-space:pre}.copy{position:absolute;right:7px;top:7px;padding:4px 8px;font-size:11px;background:#1b1e24}.error{color:#ff9da5}
+    form{display:flex;gap:10px;align-items:flex-end;padding:12px 0 18px;border-top:1px solid var(--line)}#input{flex:1;resize:none;min-height:48px;max-height:180px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:12px;outline:none}#input:focus,.system-box:focus{border-color:#7567c9}#send{height:48px;min-width:76px;background:var(--accent);border:0;color:#11101a;font-weight:650}.hint{text-align:center;color:#777f8d;font-size:11px;padding-bottom:10px}
+    @media(max-width:600px){header{height:56px;padding:0 14px}main{padding:12px 12px 0}.controls{grid-template-columns:1fr;gap:8px}.system-box{min-height:45px}.temperature{justify-content:flex-end}.temperature input{width:130px}.message{gap:8px}.avatar{width:26px;height:26px;flex-basis:26px}#send{min-width:64px}}
+  </style>
+</head>
+<body>
+  <header><strong>QwenFree</strong><span class="status"><i id="dot" class="dot"></i><span id="status-label">Checking server</span></span><button id="new-chat" type="button">New chat</button></header>
+  <main>
+    <section class="controls" aria-label="Chat settings">
+      <textarea id="system" class="system-box" aria-label="System prompt" placeholder="System prompt (optional)"></textarea>
+      <label class="temperature">Temperature <input id="temp" type="range" min="0" max="2" step="0.1" value="0.7"><span id="temp-value">0.7</span></label>
+    </section>
+    <section id="messages" role="log" aria-live="polite"></section>
+    <form id="form"><textarea id="input" aria-label="Message" placeholder="Message QwenFree…" rows="1"></textarea><button id="send" type="submit">Send</button></form>
+    <div class="hint">Responses come from a temporary remote server. Avoid sensitive personal data.</div>
+  </main>
+  <script>
+    const messagesEl=document.querySelector('#messages'),form=document.querySelector('#form'),input=document.querySelector('#input'),send=document.querySelector('#send'),systemBox=document.querySelector('#system'),temp=document.querySelector('#temp');
+    let turns=[],streaming=false;
+    function escapeHtml(value){return value.replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
+    function markdown(value){const blocks=[];const source=value.replace(/```[^\n]*\n?([\s\S]*?)```/g,(_,code)=>'\u0000'+(blocks.push(code)-1)+'\u0000');let html=escapeHtml(source);html=html.replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/\n/g,'<br>');return html.replace(/\u0000(\d+)\u0000/g,(_,index)=>'<pre><button class="copy" type="button">Copy</button><code>'+escapeHtml(blocks[Number(index)])+'</code></pre>')}
+    function addMessage(role,text=''){const row=document.createElement('article');row.className='message '+role;const avatar=document.createElement('div');avatar.className='avatar';avatar.textContent=role==='assistant'?'Q':'Y';const body=document.createElement('div');body.className='body';const who=document.createElement('div');who.className='who';who.textContent=role==='assistant'?'QwenFree':'You';const content=document.createElement('div');content.className='content';content.innerHTML=markdown(text);body.append(who,content);row.append(avatar,body);messagesEl.append(row);messagesEl.scrollTop=messagesEl.scrollHeight;return content}
+    function setStatus(connected){document.querySelector('#dot').className='dot '+(connected?'on':'off');document.querySelector('#status-label').textContent=connected?'Connected':'Server unavailable'}
+    async function checkStatus(){try{const response=await fetch('/api/status');const data=await response.json();setStatus(response.ok&&data.connected)}catch{setStatus(false)}}
+    document.querySelector('#temp').addEventListener('input',event=>document.querySelector('#temp-value').textContent=Number(event.target.value).toFixed(1));
+    document.querySelector('#new-chat').addEventListener('click',()=>{turns=[];messagesEl.replaceChildren();addMessage('assistant','Ready when you are. Start a new conversation below.')});
+    messagesEl.addEventListener('click',async event=>{if(event.target.matches('.copy')){const code=event.target.parentElement.querySelector('code').textContent;await navigator.clipboard.writeText(code);event.target.textContent='Copied';setTimeout(()=>event.target.textContent='Copy',1200)}});
+    input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();form.requestSubmit()}});
+    form.addEventListener('submit',async event=>{event.preventDefault();const text=input.value.trim();if(!text||streaming)return;streaming=true;send.disabled=true;input.value='';turns.push({role:'user',content:text});addMessage('user',text);const content=addMessage('assistant','');let answer='';const payload=[...(systemBox.value.trim()?[{role:'system',content:systemBox.value.trim()}]:[]),...turns];
+      try{const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:payload,temperature:Number(temp.value)})});if(!response.ok)throw new Error('Chat request failed ('+response.status+').');const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const frames=buffer.split('\n\n');buffer=frames.pop();for(const frame of frames){const line=frame.split('\n').find(item=>item.startsWith('data:'));if(!line)continue;const data=line.slice(5).trim();if(data==='[DONE]')continue;const eventData=JSON.parse(data);if(eventData.error)throw new Error(eventData.error);if(eventData.delta){answer+=eventData.delta;content.innerHTML=markdown(answer);messagesEl.scrollTop=messagesEl.scrollHeight}}}turns.push({role:'assistant',content:answer})}catch(error){content.classList.add('error');content.textContent=error.message||'Request failed.';checkStatus()}finally{streaming=false;send.disabled=false;input.focus()}});
+    addMessage('assistant','Ready when you are. Ask a question to begin.');checkStatus();setInterval(checkStatus,30000);
+  </script>
+</body>
+</html>

@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import shutil
 import sys
+import threading
+import webbrowser
 from pathlib import Path
 
 import typer
@@ -165,6 +167,27 @@ def clean(
         console.print(f"Removed cache: {cache_dir}")
     else:
         console.print("No cache found.")
+
+
+@app.command()
+def ui(
+    port: int = typer.Option(8765, min=1024, max=65535, help="Local web port."),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Do not open a tab."),
+) -> None:
+    """Run the local chat page and proxy on 127.0.0.1."""
+    import uvicorn
+
+    url = f"http://127.0.0.1:{port}"
+    console.print(f"QwenFree local UI: {url} (Ctrl+C to stop)")
+    if not no_browser:
+        threading.Timer(0.8, webbrowser.open_new_tab, args=(url,)).start()
+    uvicorn.run(
+        "qwenfree.web.app:app",
+        host="127.0.0.1",
+        port=port,
+        access_log=False,
+        log_level="warning",
+    )
 
 
 @app.command()
