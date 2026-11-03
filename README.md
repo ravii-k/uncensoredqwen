@@ -41,42 +41,106 @@ The tunnel URL is temporary. The API key protects the model API. The client
 stores that key in `~/.config/qwenfree/config.toml` with mode `0600`; the web
 browser never receives it.
 
-## Install the Mac client
+## Run QwenFree step by step
 
-The local installation is short; the first Kaggle server run takes longer
-because it builds llama.cpp and downloads the selected model. See the
-[Kaggle setup guide](docs/KAGGLE_GUIDE.md) for the notebook steps.
+These screenshots show the Kaggle server reporting healthy and the QwenFree
+chat page with the uncensored Qwen model selected. Temporary tunnel addresses
+and API keys are masked.
+
+### Kaggle server ready
+
+![Kaggle notebook with the server ready and health checks passing; the temporary URL and API key are redacted](docs/assets/screenshots/kaggle-server-ready.png)
+
+### QwenFree chat page
+
+![QwenFree browser chat with Qwen3.8 27B Uncensored selected](docs/assets/screenshots/qwenfree-chat-ui.png)
+
+### 1. Start the Kaggle GPU server
+
+1. Sign in to Kaggle and download [`notebooks/kaggle_server.ipynb`](notebooks/kaggle_server.ipynb).
+2. In Kaggle, choose **Create → New Notebook**, then **File → Import Notebook**.
+3. Open **Settings / Session options**. Set **Accelerator** to **GPU T4 x2** if
+   it is available to your account.
+4. Turn **Internet** on. The menu says **Turn off internet** when it is already
+   enabled; if it says **Turn on internet**, click it.
+5. For the recommended streaming tunnel, add an `NGROK_AUTHTOKEN` secret under
+   **Add-ons → Secrets** and attach it to this notebook. Without it, QwenFree
+   tries a Cloudflare Quick Tunnel, which buffers each answer until generation
+   finishes.
+6. Leave `HF_TOKEN` unset unless the Hugging Face model repository asks for
+   access. `QWENFREE_API_KEY` is optional; the notebook makes a temporary key
+   if you do not set one.
+7. Use **Run → Run All** and keep the session connected. The first run builds
+   llama.cpp and downloads the model; both steps can take a while. CUDA may
+   appear to pause at one percentage while it compiles a large kernel.
+8. Wait for `QwenFree server is ready` and the health checks. Copy the exact
+   `qwenfree connect ...` command printed by the final cell. Keep that cell
+   running while you chat.
+
+### 2. Install the Mac client
+
+1. Open Terminal on an Apple Silicon Mac with Python 3.11 or newer.
+2. Clone this repository and enter the project directory:
+
+   ```bash
+   git clone https://github.com/ravii-k/uncensoredqwen.git
+   cd uncensoredqwen
+   ```
+
+3. Run the setup script. It creates `.venv`, installs QwenFree, and checks the
+   Mac:
+
+   ```bash
+   ./scripts/mac_setup.sh
+   ```
+
+4. Activate that environment in this Terminal window:
+
+   ```bash
+   source .venv/bin/activate
+   ```
+
+### 3. Connect and chat
+
+1. Paste the exact connect command from the Kaggle output into Terminal. It
+   contains the temporary tunnel URL and API key; keep it private:
+
+   ```bash
+   qwenfree connect https://YOUR-TUNNEL-URL --key YOUR_API_KEY
+   ```
+
+2. Start a terminal conversation:
+
+   ```bash
+   qwenfree chat
+   ```
+
+3. Or open the browser chat on your Mac:
+
+   ```bash
+   qwenfree ui
+   ```
+
+4. In the browser page, check that **Qwen3.8 27B Uncensored** is selected,
+   enter a prompt, and send it. If the Kaggle session stops, rerun the notebook
+   and connect with its new URL and key.
+
+For Kaggle menu details, secret setup, and recovery steps, see the full
+[Kaggle setup guide](docs/KAGGLE_GUIDE.md) and
+[troubleshooting guide](docs/TROUBLESHOOTING.md).
 
 ![QwenFree quick start: launch Kaggle, copy the tunnel command, and chat from your Mac](docs/assets/quick-start.svg)
 
-Requirements: an Apple Silicon Mac, macOS, Python 3.11+, and an internet
-connection. Keep at least 20 GiB free for comfortable operation. The optional
-local model pull refuses to run below 15 GiB free.
+## Mac requirements
 
-From a checkout of this repository:
-
-```bash
-./scripts/mac_setup.sh
-```
-
-The script checks the Mac and Python architecture, asks before installing
+Use an Apple Silicon Mac with macOS, Python 3.11 or newer, and an internet
+connection. Keep at least 20 GiB free for comfortable operation. The setup
+script checks the Mac and Python architecture, asks before installing
 Homebrew or Python when needed, creates `.venv`, installs QwenFree, and runs
-`qwenfree doctor`. Then import `notebooks/kaggle_server.ipynb` into Kaggle and
-run it following [the guide](docs/KAGGLE_GUIDE.md). Copy the one-line command
-printed by the final cell into Mac Terminal:
+`qwenfree doctor`. The optional local model pull refuses to run below 15 GiB
+free.
 
-```bash
-qwenfree connect https://YOUR-TUNNEL-URL --key YOUR_API_KEY
-qwenfree chat
-```
-
-The URL and key are examples: use the exact values printed by your running
-notebook. Do not paste the key into a public notebook, issue, or chat.
-
-Open the browser interface instead with `qwenfree ui`. It listens only on
-`127.0.0.1:8765` and proxies requests through the local Python process.
-
-### Tunnel choice and streaming
+## Tunnel choice and streaming
 
 Add and attach an `NGROK_AUTHTOKEN` Kaggle Secret for the recommended tunnel.
 The notebook prefers ngrok when it can obtain a URL and falls back to
