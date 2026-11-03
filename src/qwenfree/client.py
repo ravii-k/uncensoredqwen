@@ -37,14 +37,21 @@ class QwenFreeClient:
 
     async def health_check(self) -> bool:
         """Return true when the server health endpoint answers successfully."""
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    f"{self.config.base_url}/health", headers=self.headers
-                )
-                return response.is_success
-        except httpx.HTTPError:
-            return False
+        for attempt in range(self.max_attempts):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.get(
+                        f"{self.config.base_url}/health", headers=self.headers
+                    )
+                    if response.is_success:
+                        return True
+                    if response.status_code < 500 and response.status_code != 408:
+                        return False
+            except httpx.HTTPError:
+                pass
+            if attempt + 1 < self.max_attempts:
+                await asyncio.sleep(0.5 * (2**attempt))
+        return False
 
     async def stream_chat(
         self,
