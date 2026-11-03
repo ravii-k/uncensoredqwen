@@ -228,8 +228,13 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
-if [[ -z "${PUBLIC_URL}" && -n "${NGROK_AUTHTOKEN:-}" ]]; then
-  echo "Cloudflare quick tunnel did not provide a URL; trying the optional ngrok fallback..."
+if [[ -n "${NGROK_AUTHTOKEN:-}" ]]; then
+  if [[ -n "${PUBLIC_URL}" ]]; then
+    echo "NGROK_AUTHTOKEN is configured; trying ngrok for token streaming."
+    echo "Cloudflare Quick Tunnels do not support Server-Sent Events."
+  else
+    echo "Cloudflare quick tunnel did not provide a URL; trying optional ngrok fallback..."
+  fi
   NGROK_DIR="${BIN_DIR}/ngrok"
   mkdir -p "${NGROK_DIR}"
   if [[ ! -x "${NGROK_DIR}/ngrok" ]]; then
@@ -246,8 +251,9 @@ if [[ -z "${PUBLIC_URL}" && -n "${NGROK_AUTHTOKEN:-}" ]]; then
   "${NGROK_DIR}/ngrok" http 8080 --config "${NGROK_CONFIG}" \
     --log stdout --log-format json > "${LOG_DIR}/ngrok.log" 2>&1 &
   NGROK_PID=$!
+  NGROK_URL=""
   for _ in $(seq 1 30); do
-    PUBLIC_URL="$(python3 - <<'PY'
+    NGROK_URL="$(python3 - <<'PY'
 import json
 import urllib.error
 import urllib.request
@@ -260,11 +266,21 @@ except (OSError, urllib.error.URLError, json.JSONDecodeError):
     print("")
 PY
     )"
-    if [[ -n "${PUBLIC_URL}" ]]; then
+    if [[ -n "${NGROK_URL}" ]]; then
       break
     fi
     sleep 2
   done
+  if [[ -n "${NGROK_URL}" ]]; then
+    PUBLIC_URL="${NGROK_URL}"
+    if [[ -n "${CLOUDFLARED_PID}" ]] && kill -0 "${CLOUDFLARED_PID}" 2>/dev/null; then
+      kill "${CLOUDFLARED_PID}" 2>/dev/null || true
+      wait "${CLOUDFLARED_PID}" 2>/dev/null || true
+      CLOUDFLARED_PID=""
+    fi
+  elif [[ -z "${PUBLIC_URL}" ]]; then
+    echo "ngrok did not provide a URL; check ${LOG_DIR}/ngrok.log." >&2
+  fi
 fi
 
 if [[ -z "${PUBLIC_URL}" ]]; then

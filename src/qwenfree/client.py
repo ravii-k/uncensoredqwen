@@ -1,4 +1,4 @@
-"""Small asynchronous OpenAI-compatible client with SSE streaming."""
+"""Small async OpenAI-compatible client with tunnel-aware response handling."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -17,7 +18,7 @@ class RemoteError(RuntimeError):
 
 
 class QwenFreeClient:
-    """Call a QwenFree llama-server using the OpenAI chat endpoint."""
+    """Call llama-server using SSE or a buffered response when the tunnel needs it."""
 
     def __init__(
         self,
@@ -68,6 +69,14 @@ class QwenFreeClient:
             "stream": True,
         }
         url = f"{self.config.base_url}/v1/chat/completions"
+        hostname = (urlsplit(self.config.base_url).hostname or "").lower()
+        if hostname.endswith(".trycloudflare.com"):
+            # Cloudflare Quick Tunnels currently do not carry SSE responses.
+            body["stream"] = False
+            async for content in self._buffered_chat(url, body):
+                yield content
+            return
+
         emitted = False
         last_error: RemoteError | None = None
 
@@ -122,5 +131,43 @@ class QwenFreeClient:
                     raise last_error from exc
                 await asyncio.sleep(0.5 * (2**attempt))
 
+        if last_error is not None:
+            raise last_error
+
+    async def _buffered_chat(
+        self, url: str, body: dict[str, Any]
+    ) -> AsyncIterator[str]:
+        """Use one completed JSON response for tunnels that do not carry SSE."""
+        last_error: RemoteError | None = None
+        for attempt in range(self.max_attempts):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.post(url, headers=self.headers, json=body)
+                    if response.status_code >= 400:
+                        if response.status_code < 500 and response.status_code != 408:
+                            raise RemoteError(
+                                f"Server returned HTTP {response.status_code}."
+                            )
+                        response.raise_for_status()
+                    try:
+                        payload = response.json()
+                        content = payload["choices"][0]["message"]["content"]
+                    except (KeyError, IndexError, TypeError, ValueError) as exc:
+                        raise RemoteError(
+                            "Server returned an invalid chat response."
+                        ) from exc
+                    if isinstance(content, str) and content:
+                        yield content
+                return
+            except RemoteError:
+                raise
+            except httpx.HTTPError as exc:
+                last_error = RemoteError(
+                    "Could not reach the QwenFree server. Check the tunnel URL and "
+                    "API key; the Kaggle session may have ended."
+                )
+                if attempt + 1 >= self.max_attempts:
+                    raise last_error from exc
+                await asyncio.sleep(0.5 * (2**attempt))
         if last_error is not None:
             raise last_error

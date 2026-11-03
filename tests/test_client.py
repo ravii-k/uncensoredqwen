@@ -14,7 +14,9 @@ from qwenfree.config import QwenFreeConfig
 async def test_health_check_uses_health_endpoint() -> None:
     config = QwenFreeConfig("https://example.test", "secret")
     with respx.mock(assert_all_called=True) as router:
-        route = router.get("https://example.test/health").mock(return_value=httpx.Response(200))
+        route = router.get("https://example.test/health").mock(
+            return_value=httpx.Response(200)
+        )
         assert await QwenFreeClient(config).health_check()
     assert route.called
 
@@ -42,6 +44,25 @@ async def test_chat_stream_parses_sse_and_sends_auth_header() -> None:
     assert chunks == ["hello", " world"]
     assert route.calls[0].request.headers["Authorization"] == "Bearer secret"
     assert route.calls[0].request.read().decode().find('"stream":true') >= 0
+
+
+@pytest.mark.asyncio
+async def test_cloudflare_quick_tunnel_uses_completed_json_response() -> None:
+    config = QwenFreeConfig("https://random.trycloudflare.com", "secret", "model-x")
+    payload = {"choices": [{"message": {"content": "completed answer"}}]}
+    with respx.mock(assert_all_called=True) as router:
+        route = router.post(
+            "https://random.trycloudflare.com/v1/chat/completions"
+        ).mock(return_value=httpx.Response(200, json=payload))
+        chunks = [
+            chunk
+            async for chunk in QwenFreeClient(config).stream_chat(
+                [{"role": "user", "content": "hi"}]
+            )
+        ]
+
+    assert chunks == ["completed answer"]
+    assert route.calls[0].request.read().decode().find('"stream":false') >= 0
 
 
 @pytest.mark.asyncio
