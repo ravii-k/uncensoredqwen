@@ -15,6 +15,8 @@ are for testing and development; check their [current limits and
 terms](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 Free tiers and interfaces can change.
 
+![QwenFree architecture: Mac client, temporary tunnel, and Kaggle GPU server](docs/assets/architecture.svg)
+
 ## Architecture
 
 ```text
@@ -38,6 +40,8 @@ browser never receives it.
 The local installation is short; the first Kaggle server run takes longer
 because it builds llama.cpp and downloads the selected model. See the
 [Kaggle setup guide](docs/KAGGLE_GUIDE.md) for the notebook steps.
+
+![QwenFree quick start: launch Kaggle, copy the tunnel command, and chat from your Mac](docs/assets/quick-start.svg)
 
 Requirements: an Apple Silicon Mac, macOS, Python 3.11+, and an internet
 connection. Keep at least 20 GiB free for comfortable operation. The optional
