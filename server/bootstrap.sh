@@ -77,6 +77,10 @@ else
 fi
 
 echo "Building llama-server with CUDA for NVIDIA T4 (compute capability 7.5)..."
+if [[ -d /usr/local/nvidia/lib64 ]]; then
+  export CMAKE_LIBRARY_PATH="/usr/local/nvidia/lib64${CMAKE_LIBRARY_PATH:+:${CMAKE_LIBRARY_PATH}}"
+  echo "Including Kaggle's NVIDIA driver libraries in CMake's search path."
+fi
 cmake -S "${LLAMA_CPP_DIR}" -B "${LLAMA_CPP_DIR}/build" \
   -DGGML_CUDA=ON \
   -DCMAKE_CUDA_ARCHITECTURES=75 \
